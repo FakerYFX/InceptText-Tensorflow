@@ -2,8 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="bf1dee52-35e9-4f49-ad82-c2999947ca8c" name="Default" comment="">
-      <change beforePath="$PROJECT_DIR$/model.py" afterPath="$PROJECT_DIR$/model.py" />
-      <change beforePath="$PROJECT_DIR$/train_main.py" afterPath="$PROJECT_DIR$/train_main.py" />
+      <change beforePath="$PROJECT_DIR$/README.md" afterPath="$PROJECT_DIR$/README.md" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="TRACKING_ENABLED" value="true" />
@@ -17,8 +16,8 @@
       <file leaf-file-name="train_main.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/train_main.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="19">
-              <caret line="127" column="47" lean-forward="false" selection-start-line="127" selection-start-column="47" selection-end-line="127" selection-end-column="47" />
+            <state relative-caret-position="76">
+              <caret line="130" column="47" lean-forward="false" selection-start-line="130" selection-start-column="47" selection-end-line="130" selection-end-column="47" />
               <folding />
             </state>
           </provider>
@@ -27,15 +26,12 @@
       <file leaf-file-name="model.py" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/model.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="1577">
-              <caret line="142" column="51" lean-forward="false" selection-start-line="142" selection-start-column="51" selection-end-line="142" selection-end-column="51" />
+            <state relative-caret-position="2983">
+              <caret line="157" column="51" lean-forward="false" selection-start-line="157" selection-start-column="51" selection-end-line="157" selection-end-column="51" />
               <folding>
                 <element signature="e#42#65#0" expanded="true" />
-                <element signature="e#980#2052#0" expanded="false" />
-                <element signature="e#2206#3650#0" expanded="false" />
-                <element signature="e#3724#4158#0" expanded="false" />
-                <element signature="e#6948#7366#0" expanded="false" />
-                <element signature="e#7465#9122#0" expanded="false" />
+                <element signature="e#8712#9130#0" expanded="false" />
+                <element signature="e#9229#10886#0" expanded="false" />
               </folding>
             </state>
           </provider>
@@ -200,11 +196,8 @@
           <caret line="142" column="51" lean-forward="false" selection-start-line="142" selection-start-column="51" selection-end-line="142" selection-end-column="51" />
           <folding>
             <element signature="e#42#65#0" expanded="true" />
-            <element signature="e#980#2052#0" expanded="false" />
-            <element signature="e#2206#3650#0" expanded="false" />
-            <element signature="e#3724#4158#0" expanded="false" />
-            <element signature="e#6948#7366#0" expanded="false" />
-            <element signature="e#7465#9122#0" expanded="false" />
+            <element signature="e#8712#9130#0" expanded="false" />
+            <element signature="e#9229#10886#0" expanded="false" />
           </folding>
         </state>
       </provider>
@@ -247,23 +240,20 @@
     <entry file="file://$PROJECT_DIR$/resnet_rfcn.py" />
     <entry file="file://$PROJECT_DIR$/model.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="1577">
-          <caret line="142" column="51" lean-forward="false" selection-start-line="142" selection-start-column="51" selection-end-line="142" selection-end-column="51" />
+        <state relative-caret-position="2983">
+          <caret line="157" column="51" lean-forward="false" selection-start-line="157" selection-start-column="51" selection-end-line="157" selection-end-column="51" />
           <folding>
             <element signature="e#42#65#0" expanded="true" />
-            <element signature="e#980#2052#0" expanded="false" />
-            <element signature="e#2206#3650#0" expanded="false" />
-            <element signature="e#3724#4158#0" expanded="false" />
-            <element signature="e#6948#7366#0" expanded="false" />
-            <element signature="e#7465#9122#0" expanded="false" />
+            <element signature="e#8712#9130#0" expanded="false" />
+            <element signature="e#9229#10886#0" expanded="false" />
           </folding>
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/train_main.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="19">
-          <caret line="127" column="47" lean-forward="false" selection-start-line="127" selection-start-column="47" selection-end-line="127" selection-end-column="47" />
+        <state relative-caret-position="76">
+          <caret line="130" column="47" lean-forward="false" selection-start-line="130" selection-start-column="47" selection-end-line="130" selection-end-column="47" />
           <folding />
         </state>
       </provider>
