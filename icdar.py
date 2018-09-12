@@ -14,7 +14,7 @@ import tensorflow as tf
 
 from data_util import GeneratorEnqueuer
 
-tf.app.flags.DEFINE_string('training_data_path', '/data/ocr/icdar2015/',
+tf.app.flags.DEFINE_string('training_data_path', '/data/20180809/icdar2017-east/',
                            'training dataset to use')
 tf.app.flags.DEFINE_integer('max_image_large_side', 1280,
                             'max image size of training')
@@ -26,9 +26,6 @@ tf.app.flags.DEFINE_integer('min_text_size', 10,
 tf.app.flags.DEFINE_float('min_crop_side_ratio', 0.1,
                           'when doing random crop from input image, the'
                           'min length of min(H, W')
-tf.app.flags.DEFINE_string('geometry', 'RBOX',
-                           'which geometry to generate, RBOX or QUAD')
-
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -580,7 +577,7 @@ def generate_rbox(im_size, polys, tags):
     return score_map, geo_map, training_mask
 
 
-def generator(input_size=512, batch_size=32,
+def generator(input_size=512, batch_size=16,
               background_ratio=3./8,
               random_scale=np.array([0.5, 1, 2.0, 3.0]),
               vis=False):
@@ -627,7 +624,7 @@ def generator(input_size=512, batch_size=32,
                     im_padded[:new_h, :new_w, :] = im.copy()
                     im = cv2.resize(im_padded, dsize=(input_size, input_size))
                     score_map = np.zeros((input_size, input_size), dtype=np.uint8)
-                    geo_map_channels = 5 if FLAGS.geometry == 'RBOX' else 8
+                    geo_map_channels = 5
                     geo_map = np.zeros((input_size, input_size, geo_map_channels), dtype=np.float32)
                     training_mask = np.ones((input_size, input_size), dtype=np.uint8)
                 else:

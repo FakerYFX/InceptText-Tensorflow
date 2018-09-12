@@ -3,9 +3,10 @@
 
 import tensorflow as tf
 import numpy as np
-
+tf.app.flags.DEFINE_integer('text_scale', 512, '')
 from tensorflow.contrib import slim
 from nets import resnet_v1
+FLAGS = tf.app.flags.FLAGS
 import tensorflow.contrib.layers as layers
 from lib.deform_conv_layer.deform_conv_op import deform_conv_op
 from lib.deform_psroi_pooling_layer import deform_psroi_pooling_op
@@ -13,43 +14,6 @@ from lib.cnn_tools.tools import *
 from lib.rpn_tools.my_anchor_target_layer_modified import AnchorTargetLayer
 from lib.rpn_tools.proposal_layer_modified import ProposalLayer_Chunk
 from lib.rpn_tools.proposal_target_layer_modified import ProposalTargetLayer
-
-A = 9
-height = 38
-width = 63
-_rpn_stat = True #train rpn layers
-_add_l2 = True #include weight losses
-_fc_stat = True # train "fc" -- which are hconv5 residual layers and up
-gt_box = tf.placeholder(tf.int64)
-gt_boxbatch = tf.reshape(tf.stack(gt_box), [-1, 5])
-
-def proposal_target(rpn_rois, gt):
-  rpn_rois = np.array(rpn_rois)
-  gt = np.array(gt)
-  proposer_target = ProposalTargetLayer()
-  proposer_target.setup()
-  rois, labels, bbox_targets, bbox_inside_weights, bbox_outside_weights = \
-      proposer_target.forward(rpn_rois, gt)
-  return rois.astype(np.int32), labels.astype(np.int64), bbox_targets, \
-      bbox_inside_weights, bbox_outside_weights
-
-def proposal(cls, bbox):
-  cls = np.array(cls)
-  bbox = np.array(bbox)
-  proposer = ProposalLayer_Chunk()
-  proposer.setup(cls, bbox)
-  blob = proposer.forward(cls, bbox)
-  return blob
-
-def anchor(x, g):
-  x = np.array(x)
-  g = np.array(g)
-  anchor = AnchorTargetLayer()
-  anchor.setup(x, g)
-  labels, bbox_targets, bbox_inside_weights, bbox_outside_weights, n = \
-      anchor.forward(x, g)
-  return labels.astype(np.int64), bbox_targets, bbox_inside_weights, \
-      bbox_outside_weights, np.array(n).astype(np.float32)
 
 def lrelu(x, leak=0.3, name="lrelu"):
     with tf.variable_scope(name):
@@ -59,46 +23,71 @@ def lrelu(x, leak=0.3, name="lrelu"):
 
 def deform_conv_2d(img, num_outputs, kernel_size=3, stride=2,
                    normalizer_fn=layers.batch_norm, activation_fn=lrelu, name=''):
+    img = tf.transpose(img, [0, 3, 1, 2])
     img_shape = img.shape.as_list()
+    print("img_shape:"+str(img_shape))
     assert(len(img_shape) == 4)
     N, C, H, W = img_shape
-    with tf.variable_scope('deform_conv' + '_' + name):
-        offset = layers.conv2d(img, num_outputs=2 * kernel_size**2, kernel_size=3,
-                           stride=2, activation_fn=None, data_format='NCHW')
-        kernel = tf.get_variable(name='d_kernel', shape=(num_outputs, C, kernel_size, kernel_size),
-                                 initializer=tf.random_normal_initializer(0, 0.02))
+    with tf.variable_scope('deform_conv' + '_' + name,reuse=tf.AUTO_REUSE):
+        img = tf.transpose(img, [0, 2, 3, 1])
+        offset = layers.conv2d(img, num_outputs=2 * kernel_size**2, kernel_size=3,stride=2, activation_fn=None, data_format='NHWC')
+        print("offset:"+str(offset.shape))
+        offset = tf.transpose(offset, [0, 3, 1, 2])
+        kernel = tf.get_variable(name='',shape=(num_outputs, C, kernel_size, kernel_size),initializer=tf.random_normal_initializer(0, 0.02))
+        img = tf.transpose(img, [0, 3, 1, 2])
         res = deform_conv_op(img, filter=kernel, offset=offset, rates=[1, 1, 1, 1], padding='SAME',
                              strides=[1, 1, stride, stride], num_groups=1, deformable_group=1)
-        if normalizer_fn is not None:
-            res = normalizer_fn(res)
-        if activation_fn is not None:
-            res = activation_fn(res)
+        #if normalizer_fn is not None:
+        #    res = normalizer_fn(res)
+        #if activation_fn is not None:
+        #    res = activation_fn(res)
 
     return res
 
 def get_inception_layer(inputs, conv11_size, conv33_11_size, conv33_size,
+                        conv55_11_size, conv55_size, pool11_size):
+    with tf.variable_scope("conv_1x1"):
+        conv11 = layers.conv2d(inputs, conv11_size, [1, 1],padding="same")
+    with tf.variable_scope("conv_3x3"):
+        conv33_11 = layers.conv2d(inputs, conv33_11_size, [1, 1],padding="same")
+        conv33 = layers.conv2d(conv33_11, conv33_size, [3, 3],padding="same")
+    with tf.variable_scope("conv_5x5"):
+        conv55_11 = layers.conv2d(inputs, conv55_11_size, [1, 1],padding="same")
+        conv55 = layers.conv2d(conv55_11, conv55_size, [5, 5],padding="same")
+    with tf.variable_scope("pool_proj"):
+        pool_proj = layers.max_pool2d(inputs, [3, 3], stride=1,padding="same")
+        pool11 = layers.conv2d(pool_proj, pool11_size, [1, 1],padding="same")
+    if tf.__version__ == '0.11.0rc0':
+        return tf.concat(3, [conv11, conv33, conv55, pool11])
+    print("sss:"+str(tf.concat([conv11,conv33,conv55,pool11],3).shape))
+    return tf.concat([conv11, conv33, conv55, pool11], 3)
+
+def get_inception_text_layer(inputs, conv11_size, conv33_11_size, conv33_size,
                         conv55_11_size, conv55_size, conv_shortcut_size):
     with tf.variable_scope("conv_1x1"):
-        conv11 = layers.conv2d(inputs, conv11_size, [1, 1])
-        #deformable conv
-        conv11_s = deform_conv_2d(conv11, conv11_size,kernel_size=3,stride=2, activation_fn=lrelu)
+        conv11 = layers.conv2d(inputs, conv11_size, [1, 1])#(batch,32,32,256)
+        conv11_s = deform_conv_2d(conv11, conv11_size,kernel_size=3,stride=1,normalizer_fn=layers.batch_norm, activation_fn=lrelu)#(batch,256,31,31)
     with tf.variable_scope("conv_3x3"):
-        conv33_11 = layers.conv2d(inputs, conv33_11_size, [1, 1])
-        conv33 = layers.conv2d(conv33_11, conv33_size, [3, 3])
-        # deformable conv
-        conv33_s = deform_conv_2d(conv33, conv33_size, kernel_size=3, stride=2, activation_fn=lrelu)
+        conv33_11 = layers.conv2d(inputs, conv33_11_size, [1, 1])#(batch,32,32,256)
+        conv33 = layers.conv2d(conv33_11, conv33_size, [3, 3],padding="same") #(batch,32,32,256)
+        conv33_s = deform_conv_2d(conv33, conv33_size, kernel_size=3, stride=1,normalizer_fn=layers.batch_norm, activation_fn=lrelu)#(batch,256,31,31)
     with tf.variable_scope("conv_5x5"):
-        conv55_11 = layers.conv2d(inputs, conv55_11_size, [1, 1])
-        conv55 = layers.conv2d(conv55_11, conv55_size, [5, 5])
-        # deformable conv
-        conv55_s = deform_conv_2d(conv55, conv55_size, kernel_size=3, stride=2, activation_fn=lrelu)
-    with tf.variable_scope("conv_shortcut"):
-        conv_shortcut = layers.conv2d(inputs, conv_shortcut_size,[1, 1])
-        short_cut_result = layers.conv2d(conv_shortcut,[1, 1])
-    conv_left = tf.concat([conv11_s, conv33_s, conv55_s],3)
-    conv_left_next = layers.conv2d(conv_left,256,[1,1])
+        conv55_11 = layers.conv2d(inputs, conv55_11_size, [1, 1])#(batch,32,32,256)
+        conv55 = layers.conv2d(conv55_11, conv55_size, [5, 5],padding="same")#(batch,32,32,256)
+        conv55_s = deform_conv_2d(conv55, conv55_size, kernel_size=3, stride=1, normalizer_fn=layers.batch_norm,activation_fn=lrelu)#(batch,256,31,31)
+    conv_shortcut = layers.conv2d(inputs, conv_shortcut_size,[1, 1])#(batch,32,32,256)
+    #short_cut_result = layers.conv2d(conv_shortcut,conv_shortcut_size,[1, 1])#(batch,32,32,256)
+    print("conv11_s.shape:"+str(conv11_s.shape))
+    print("conv33_s.shape:"+str(conv11_s.shape))
+    print("conv55_s.shape:"+str(conv11_s.shape))
+        
+    conv_left = tf.concat([tf.transpose(conv11_s,[0,2,3,1]), tf.transpose(conv33_s,[0,2,3,1]), tf.transpose(conv55_s,[0,2,3,1])],3)#(batch,768,16,16)
+    print("conv_left:"+str(conv_left.shape))
+    #conv_left = tf.transpose(conv_left, [0, 2, 3, 1])#(batch,16,16,768)
+    #print("conv_left_new:"+str(conv_left.shape))
+    conv_left_next = layers.conv2d(conv_left,32,[1,1])#(batch,16,16,256)
     last_result = tf.nn.relu(tf.add(conv_left_next,conv_shortcut))
-
+    print("last_result:"+str(last_result.shape))
     return last_result
 
 def mean_image_subtraction(images, means=[123.68, 116.78, 103.94]):
@@ -141,141 +130,93 @@ def model(images, weight_decay=1e-5, is_training=True):
                             normalizer_params=batch_norm_params,
                             weights_regularizer=slim.l2_regularizer(weight_decay)):
             #resnet50
-            f = [end_points['pool3'],end_points['pool4'], end_points['pool5']]
+            #f = [end_points['pool3'],end_points['pool3'], end_points['pool3']]
+            f =[end_points["resnet_v1_50/block2"],end_points["resnet_v1_50/block3"],end_points["resnet_v1_50/block4"]]
             for i in range(3):
                 print('Shape of f_{} {}'.format(i, f[i].shape))
-            num_outputs = [1024]
-            c_stage3 = slim.conv2d(f[0], num_outputs[0], [1,1])
-            unsample_stage4 = unpool(f[1])
-            h1 = tf.concat([c_stage3, unsample_stage4], axis=-1)
-            unsample_stage5 = unpool(f[2])
-            h2 = tf.concat([c_stage3, unsample_stage5], axis=-1)
+            #num_outputs = [1024]
+	    num_outputs = [1024]
+            
+            c_stage3 = slim.conv2d(f[0], num_outputs[0], [1,1]) #(batch,32,32,1024)
+            print("c_stage3.shape:"+str(c_stage3.shape))
+            unsample_stage4 = unpool(f[1]) #(batch,32,32,1024)
+            print("unsample_stage4.shape:"+str(unsample_stage4.shape))
+            h1 = tf.add(c_stage3, unsample_stage4) #(batch,32,32,1024)
+            print("h1.shape:"+str(h1.shape))
+
+            c_stage5 = slim.conv2d(f[2],num_outputs[0],[1,1])#(batch,32,32,1024)
+            unsample_stage5 = unpool(c_stage5)#(batch,32,32,1024)
+            h2 = tf.add(c_stage3, unsample_stage5)#(batch,32,32,1024)
+            h12 = tf.concat([h1,h2],3)
             #Inception-Text
-            I1 = get_inception_layer(h1,256,256,256,256,256,256)
-            I2 = get_inception_layer(h2,256,256,256,256,256,256)
-            #RPN part
-            with tf.name_scope("rpn"):
-                W_rpnbase = weight_variable([3, 3, 256, 256], "rpn", tr_stat=_rpn_stat, add_l2_stat=_add_l2)
-                b_rpnbase = bias_variable([512], "rpn", tr_stat=_rpn_stat, add_l2_stat=_add_l2)
-                h_rpn3 = tf.nn.relu(conv2d(I1, W_rpnbase) + b_rpnbase)
+            I_all = get_inception_text_layer(h12,64,96,128,16,32,32)
+            #I_12 = tf.nn.relu(tf.add(I1,I2))
+            for i in range(2):
+		I_all=unpool(I_all)
+            #print("I_last.shape:"+str(I_last.shape))
+            F_score = slim.conv2d(I_all, 1, 1, activation_fn=tf.nn.sigmoid, normalizer_fn=None)
+            # 4 channel of axis aligned bbox and 1 channel rotation angle
+            geo_map = slim.conv2d(I_all, 4, 1, activation_fn=tf.nn.sigmoid, normalizer_fn=None) * FLAGS.text_scale
+            angle_map = (slim.conv2d(I_all, 1, 1, activation_fn=tf.nn.sigmoid, normalizer_fn=None) - 0.5) * np.pi/2 # angle is between [-45, 45]
+            F_geometry = tf.concat([geo_map, angle_map], axis=-1)
+            print("F_score.shape:"+str(F_score.shape))
+	    print("F_geometry.shape:"+str(F_geometry.shape))
+    return F_score, F_geometry
 
-                W_cls_score = weight_variable([1, 1, 512, 18], "rpn", tr_stat=_rpn_stat, add_l2_stat=_add_l2)
-                b_cls_score = bias_variable([18], "rpn", tr_stat=_rpn_stat, add_l2_stat=_add_l2)
-                rpn_cls_score = (conv2d_nopad(h_rpn3, W_cls_score) + b_cls_score)
 
-                W_bbox_pred = weight_variable_bbox([1, 1, 512, 36], "rpn", tr_stat=_rpn_stat, add_l2_stat=_add_l2)
-                b_bbox_pred = bias_variable([36], "rpn", tr_stat=_rpn_stat, add_l2_stat=_add_l2)
-                rpn_bbox_pred = (conv2d_nopad(h_rpn3, W_bbox_pred) + b_bbox_pred)
 
-            # RPN loss and accuracy calculation
-            rpn_bbox_pred = tf.reshape(rpn_bbox_pred, [1, height, width, A * 4])
-            rpn_cls_score_reshape = tf.reshape(rpn_cls_score, [-1, 2]) + 1e-20
+def dice_coefficient(y_true_cls, y_pred_cls,
+                     training_mask):
+    '''
+    dice loss
+    :param y_true_cls:
+    :param y_pred_cls:
+    :param training_mask:
+    :return:
+    '''
+    eps = 1e-5
+    intersection = tf.reduce_sum(y_true_cls * y_pred_cls * training_mask)
+    union = tf.reduce_sum(y_true_cls * training_mask) + tf.reduce_sum(y_pred_cls * training_mask) + eps
+    loss = 1. - (2 * intersection / union)
+    tf.summary.scalar('classification_dice_loss', loss)
+    return loss
 
-            rpn_labels_ind, rpn_bbox_targets, rpn_bbox_inside_weights, rpn_bbox_outside_weights, rpn_size = \
-                tf.py_func(anchor, [rpn_cls_score, gt_boxbatch],
-                           [tf.int64, tf.float32, tf.float32, tf.float32, tf.float32])
 
-            rpn_labels_ind = tf.reshape(tf.stack(rpn_labels_ind), [-1])
-            rpn_bbox_targets = tf.reshape(tf.stack(rpn_bbox_targets), [1, height, width, A * 4])
-            rpn_bbox_inside_weights = tf.reshape(tf.stack(rpn_bbox_inside_weights), [1, height, width, A * 4])
-            rpn_bbox_outside_weights = tf.reshape(tf.stack(rpn_bbox_outside_weights), [1, height, width, A * 4])
 
-            rpn_cls_soft = tf.nn.softmax(rpn_cls_score_reshape)
-            rpn_cls_score_x = tf.reshape(tf.gather(rpn_cls_score_reshape, tf.where(tf.not_equal(rpn_labels_ind, -1))),
-                                         [-1, 2])
-            rpn_label = tf.reshape(tf.gather(rpn_labels_ind, tf.where(tf.not_equal(rpn_labels_ind, -1))), [-1])
-            rpn_loss_cls = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(rpn_cls_score_x, rpn_label))
+def loss(y_true_cls, y_pred_cls,
+         y_true_geo, y_pred_geo,
+         training_mask):
+    '''
+    define the loss used for training, contraning two part,
+    the first part we use dice loss instead of weighted logloss,
+    the second part is the iou loss defined in the paper
+    :param y_true_cls: ground truth of text
+    :param y_pred_cls: prediction of text
+    :param y_true_geo: ground truth of geometry
+    :param y_pred_geo: prediction of geometry
+    :param training_mask: mask used in training, to ignore some text annotated by ###
+    :return:
+    '''
+    classification_loss = dice_coefficient(y_true_cls, y_pred_cls, training_mask)
+    # scale classification loss to match the iou loss part
+    classification_loss *= 0.01
 
-            unique_rpn_cls, o_cls, o_cls_ind = tf.py_func(cls_unique,
-                                                          [rpn_cls_soft, rpn_labels_ind],
-                                                          [tf.float32, tf.float32, tf.float32])
-            unique_rpn_cls = tf.stack(unique_rpn_cls)
+    # d1 -> top, d2->right, d3->bottom, d4->left
+    d1_gt, d2_gt, d3_gt, d4_gt, theta_gt = tf.split(value=y_true_geo, num_or_size_splits=5, axis=3)
+    d1_pred, d2_pred, d3_pred, d4_pred, theta_pred = tf.split(value=y_pred_geo, num_or_size_splits=5, axis=3)
+    area_gt = (d1_gt + d3_gt) * (d2_gt + d4_gt)
+    area_pred = (d1_pred + d3_pred) * (d2_pred + d4_pred)
+    w_union = tf.minimum(d2_gt, d2_pred) + tf.minimum(d4_gt, d4_pred)
+    h_union = tf.minimum(d1_gt, d1_pred) + tf.minimum(d3_gt, d3_pred)
+    area_intersect = w_union * h_union
+    area_union = area_gt + area_pred - area_intersect
+    L_AABB = -tf.log((area_intersect + 1.0)/(area_union + 1.0))
+    L_theta = 1 - tf.cos(theta_pred - theta_gt)
+    tf.summary.scalar('geometry_AABB', tf.reduce_mean(L_AABB * y_true_cls * training_mask))
+    tf.summary.scalar('geometry_theta', tf.reduce_mean(L_theta * y_true_cls * training_mask))
+    L_g = L_AABB + 20 * L_theta
 
-            rpn_correct_prediction = tf.py_func(rpn_accuracy, [rpn_cls_soft, rpn_labels_ind], [tf.float32])
-            rpn_correct_prediction = tf.reshape(tf.stack(rpn_correct_prediction), [-1])
-            rpn_cls_accuracy = tf.reduce_mean(tf.cast(rpn_correct_prediction, tf.float32))
-
-            sigma = 3 * 3
-
-            smoothL1_sign = tf.cast(tf.less(tf.abs(tf.subtract(rpn_bbox_pred, rpn_bbox_targets)), 1 / sigma), tf.float32)
-            rpn_loss_bbox = tf.multiply(tf.reduce_mean(tf.reduce_sum(tf.multiply(rpn_bbox_outside_weights, tf.add(
-                tf.multiply(tf.multiply(tf.pow(tf.multiply(rpn_bbox_inside_weights,
-                                                           tf.subtract(rpn_bbox_pred, rpn_bbox_targets)), 2), 0.5 * sigma), smoothL1_sign),
-                                                           tf.multiply(tf.subtract(tf.abs(tf.subtract(rpn_bbox_pred, rpn_bbox_targets)), 0.5 / sigma),
-                                                           tf.abs(smoothL1_sign - 1)))), reduction_indices=[1, 2])), 1)
-            rpn_loss_bbox_label = rpn_loss_bbox
-            zero_count, one_count = tf.py_func(bbox_counter, [rpn_labels_ind], [tf.float32, tf.float32])
-
-            # ROI PROPOSAL
-            rpn_cls_prob = rpn_cls_soft
-            rpn_cls_prob_reshape = tf.reshape(rpn_cls_prob, [1, height, width, 18])
-
-            rpn_rois = tf.py_func(proposal, [rpn_cls_prob_reshape, rpn_bbox_pred], [tf.float32])
-            rpn_rois = tf.reshape(rpn_rois, [-1, 5])
-
-            rcnn_rois, rcnn_labels_ind, rcnn_bbox_targets, rcnn_bbox_inside_w, rcnn_bbox_outside_w = \
-                tf.py_func(proposal_target, [rpn_rois, gt_boxbatch],
-                           [tf.int32, tf.int64, tf.float32, tf.float32, tf.float32])
-            rcnn_rois = tf.cast(tf.reshape(tf.stack(rcnn_rois), [-1, 5]), tf.float32)
-            rcnn_labels_ind = tf.reshape(tf.stack(rcnn_labels_ind), [-1])
-            rcnn_bbox_targets = tf.reshape(tf.stack(rcnn_bbox_targets), [-1, 2 * 4])
-            rcnn_bbox_inside_w = tf.reshape(tf.stack(rcnn_bbox_inside_w), [-1, 2 * 4])
-            rcnn_bbox_outside_w = tf.reshape(tf.stack(rcnn_bbox_outside_w), [-1, 2 * 4])
-
-            #rfcn-cls-seg and rfcn-box
-            with tf.name_scope("fc"):
-                W_end_base = weight_variable([1, 1, 2048, 1024], "fc", tr_stat=_fc_stat, add_l2_stat=_add_l2)
-                b_end_base = bias_variable([1024], "fc", tr_stat=_fc_stat, add_l2_stat=_add_l2)
-                h_end_base = tf.nn.relu(conv2d_nopad(I2, W_end_base) + b_end_base)
-
-                W_rfcn_cls = weight_variable([1, 1, 1024, 1029], "fc", tr_stat=_fc_stat, add_l2_stat=_add_l2)
-                b_rfcn_cls = bias_variable([1029], "fc", tr_stat=_fc_stat, add_l2_stat=_add_l2)
-                h_rfcn_cls = tf.nn.relu(conv2d_nopad(h_end_base, W_rfcn_cls) + b_rfcn_cls)
-
-                W_rfcn_bbox = weight_variable([1, 1, 1024, 392], "fc", tr_stat=_fc_stat, add_l2_stat=_add_l2)
-                b_rfcn_bbox = bias_variable([392], "fc", tr_stat=_fc_stat, add_l2_stat=_add_l2)
-                h_rfcn_bbox = tf.nn.relu(conv2d_nopad(h_end_base, W_rfcn_bbox) + b_rfcn_bbox)
-
-                h_rfcn_cls = tf.transpose(h_rfcn_cls, [0, 3, 1, 2])
-                [psroipooled_cls_rois, cls_channels] = deform_psroi_pooling_op.deform_psroi_pool(h_rfcn_cls, rcnn_rois, output_dim=21,
-                                                                                   group_size=7, spatial_scale=1.0 / 16)
-                psroipooled_cls_rois = tf.transpose(psroipooled_cls_rois, [0, 2, 3, 1])
-                end_cls = tf.reduce_mean(psroipooled_cls_rois, [1, 2])
-                end_cls = tf.reshape(end_cls, [-1, 21])
-
-                h_rfcn_bbox = tf.transpose(h_rfcn_bbox, [0, 3, 1, 2])
-                [psroipooled_loc_rois, loc_channels] = deform_psroi_pooling_op.deform_psroi_pool(h_rfcn_bbox, rcnn_rois, output_dim=8,
-                                                                                   group_size=7, spatial_scale=1.0 / 16)
-                psroipooled_loc_rois = tf.transpose(psroipooled_loc_rois, [0, 2, 3, 1])
-                end_bbox = tf.reduce_mean(psroipooled_loc_rois, [1, 2])
-                end_bbox = tf.reshape(end_bbox, [-1, 8])
-
-    return end_cls,rcnn_labels_ind,end_bbox,rcnn_bbox_targets,rcnn_bbox_outside_w,rcnn_bbox_inside_w,rpn_loss_cls,rpn_loss_bbox
-
-def loss(end_cls,rcnn_labels_ind,end_bbox,rcnn_bbox_targets,rcnn_bbox_outside_w,rcnn_bbox_inside_w,rpn_loss_cls,rpn_loss_bbox):
-    # END_LOSS
-    end_cls_soft = tf.nn.softmax(end_cls)
-    loss_cls = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(end_cls, rcnn_labels_ind))
-    loss_cls_label = loss_cls
-
-    pred = tf.argmax(end_cls_soft, 1)
-    end_correct_prediction = tf.equal(pred, rcnn_labels_ind)
-    end_cls_accuracy = tf.reduce_mean(tf.cast(end_correct_prediction, tf.float32))
-
-    sigma2 = 1
-
-    smoothL1_sign_bbox = tf.cast(tf.less(tf.abs(tf.subtract(end_bbox, rcnn_bbox_targets)), 1 / sigma2), tf.float32)
-
-    loss_bbox = tf.multiply(tf.reduce_mean(tf.reduce_sum(tf.multiply(rcnn_bbox_outside_w, tf.add(tf.multiply(tf.multiply(tf.pow(tf.multiply(rcnn_bbox_inside_w, tf.subtract(end_bbox, rcnn_bbox_targets)), 2), 0.5 * sigma2),
-               smoothL1_sign_bbox),tf.multiply(tf.subtract(tf.abs(tf.subtract(end_bbox, rcnn_bbox_targets)), 0.5 / sigma2), tf.abs(smoothL1_sign_bbox - 1)))),
-                                                    reduction_indices=[1])), 1)
-    total_loss = rpn_loss_cls + rpn_loss_bbox + loss_cls + loss_bbox + (
-                tf.add_n(tf.get_collection('weight_losses_trunk')) +
-                tf.add_n(tf.get_collection('weight_losses_rpn')) + tf.add_n(
-                tf.get_collection('weight_losses_rcnn')) + tf.add_n(tf.get_collection('weight_losses_fc')))
-
-    return total_loss
-
+    return tf.reduce_mean(L_g * y_true_cls * training_mask) + classification_loss
 
 if __name__ == '__main__':
     pass
