@@ -10,3 +10,6 @@ An Implementation of the seglink alogrithm in paper IncepText: A New Inception-T
 
 ## Train
 ### python train_main.py
+
+## Test
+### python test.py
