@@ -1,5 +1,5 @@
 # InceptText-Tensorflow
-An Implementation of the seglink alogrithm in paper IncepText: A New Inception-Text Module with Deformable PSROI Pooling for Multi-Oriented Scene Text Detection
+An Implementation of the alogrithm in paper IncepText: A New Inception-Text Module with Deformable PSROI Pooling for Multi-Oriented Scene Text Detection
 
 ## Introduction
 ### Tensorflow=1.4
