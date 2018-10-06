@@ -2,7 +2,7 @@
 An Implementation of the alogrithm in paper IncepText: A New Inception-Text Module with Deformable PSROI Pooling for Multi-Oriented Scene Text Detection
 
 ## Introduction
-### Tensorflow=1.4
+### Tensorflow=1.3
 
 ## Download
 ### 1.Models trained on ICDAR 2017
