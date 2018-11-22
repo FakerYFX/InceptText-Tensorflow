@@ -29,14 +29,13 @@ limitations under the License.
 #   time as the code is pre-optimized for them.
 # CUDA_MODELS=30 35 37 52 60 61
 */
-
 // DO NOT EDIT: automatically generated file
 #ifndef CUDA_CUDA_CONFIG_H_
 #define CUDA_CUDA_CONFIG_H_
 // please modify the TF_CUDA_CAPABILITIES according to the above list and
 // your gpu model.
 
-#define TF_CUDA_CAPABILITIES CudaVersion("3.7")
+#define TF_CUDA_CAPABILITIES CudaVersion("8.0")
 
 #define TF_CUDA_VERSION "8.0"
 #define TF_CUDNN_VERSION "6"
