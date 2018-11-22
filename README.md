@@ -14,15 +14,17 @@ An Implementation of the alogrithm in paper IncepText: A New Inception-Text Modu
 
 - 可能遇到的错误：
 
-1.![error1](/Users/xieyufei/Desktop/error1.jpg)
+1.![error1](error_pic/error1.jpg)
 
 解决办法：把cuda路径添加到系统环境变量，然后改为#include<cuda.h>
 
-2.![error2](/Users/xieyufei/Desktop/error2.jpg)
+2.![error2](error_pic/error2.jpg)
 
 解决办法：找到nsync_cv.h的绝对路径然后include
 
-![error3](/Users/xieyufei/Desktop/error3.jpg)3.解决办法：找到nsync_mu.h的绝对路径然后include
+3.![error3](error_pic/error3.jpg)
+
+解决办法：找到nsync_mu.h的绝对路径然后include
 
 ## Download
 ### 1.Models trained on ICDAR 2017
